@@ -40,4 +40,6 @@ async def normalize_ocr(raw_ocr: str) -> dict:
         text = text.rsplit("```", 1)[0]
         text = text.strip()
 
-    return json.loads(text)
+    result = json.loads(text)
+    logger.info("Gemini raw result: %s", result)
+    return result

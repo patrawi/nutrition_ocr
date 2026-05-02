@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,7 +32,7 @@ class NutritionData:
             if per_unit:
                 value, unit = parse_serving_size(per_unit)
 
-        return cls(
+        nutrition = cls(
             item_name=data.get("item_name") or "Unknown",
             serving_value=value,
             serving_unit=unit,
@@ -38,6 +41,8 @@ class NutritionData:
             carbs=_none_if_empty(data.get("carbs")),
             fat=_none_if_empty(data.get("fat")),
         )
+        logger.info("Parsed NutritionData: %s", nutrition)
+        return nutrition
 
     def format_summary(self) -> str:
         """Format a user-facing summary."""
@@ -71,5 +76,9 @@ def parse_serving_size(text: str) -> tuple[str | None, str | None]:
     return None, text
 
 
-def _none_if_empty(value: str | None) -> str | None:
-    return value.strip() if value and value.strip() else None
+def _none_if_empty(value: object) -> str | None:
+    """Coerce a value to a stripped string, or None if empty."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text if text else None
