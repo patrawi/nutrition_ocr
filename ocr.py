@@ -26,6 +26,7 @@ async def ocr_image(image_bytes: bytes) -> str:
         logger.info("Mistral OCR pages count: %s", len(ocr_response.pages))
         for i, page in enumerate(ocr_response.pages):
             logger.info("Page %s type: %s, attrs: %s", i, type(page), dir(page))
+            logger.info("Page %s markdown: %s", i, page.markdown)
     else:
         logger.warning("Mistral OCR response has no 'pages' attr")
 
