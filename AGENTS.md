@@ -9,7 +9,7 @@ NutriTracker is a Telegram bot that extracts nutrition data from food-label phot
 ## Environment Setup
 
 1. Install dependencies: `pip install -r requirements.txt`
-   - **Important**: `mistralai` is pinned to `>=1.0.0,<2.0.0` because v2.x has breaking API changes (import paths changed)
+   - `mistralai` is pinned to `>=2.0.0` (v2 has breaking import and API schema changes)
 2. Copy `.env.example` to `.env` and fill in required API keys
 3. Google Sheets requires either:
    - Local: `GOOGLE_SHEETS_CREDENTIALS=path/to/credentials.json` (service account file)
@@ -68,4 +68,13 @@ The app is split into focused modules:
 - `normalize_ocr` strips markdown code fences from Gemini output before parsing JSON — preserve this logic.
 - `append_nutrition_row` uses `value_input_option="USER_ENTERED"` — keep this so numbers parse correctly in Sheets.
 - `parse_serving_size` handles strings like `"100g"`, `"100ml"`, `"15 g"` and falls back gracefully on unparseable input.
-- If modifying the prompt in `normalizer.py`, keep the `serving_value` / `serving_unit` keys so `NutritionData.from_gemini_dict` can use them directly.
+
+### Critical Mistral v2 Gotchas
+
+- **Import path**: `from mistralai.client import Mistral` (not `from mistralai import Mistral`).
+- **Base64 images must use typed models**: Pass `ImageURLChunk(type="image_url", image_url=ImageURL(url=data_uri))` to `ocr.process`. Passing a raw dict with a string `image_url` causes the model to return garbage binary output.
+- **No test suite existed until recently** — linting is configured; tests live under `tests/`.
+
+### Critical Gemini Gotcha
+
+- Gemini may return integers (e.g., `{"calories": 100}`) instead of strings. `NutritionData.from_gemini_dict` coerces values with `str()` before stripping — preserve this when modifying the parser.

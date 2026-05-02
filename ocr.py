@@ -27,9 +27,10 @@ async def ocr_image(image_bytes: bytes) -> str:
         document=document,
     )
 
-    logger.info("Mistral OCR pages count: %s", len(ocr_response.pages))
-    for i, page in enumerate(ocr_response.pages):
-        logger.info("Page %s markdown length: %s", i, len(page.markdown))
-        logger.info("Page %s markdown preview: %s", i, page.markdown[:200])
-
-    return "\n".join(page.markdown for page in ocr_response.pages)
+    text = "\n".join(page.markdown for page in ocr_response.pages)
+    logger.info(
+        "OCR extracted %d chars from %d pages",
+        len(text),
+        len(ocr_response.pages),
+    )
+    return text
