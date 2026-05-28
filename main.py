@@ -80,6 +80,19 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         gemini_dict = await normalize_ocr(raw_ocr)
         nutrition = NutritionData.from_gemini_dict(gemini_dict)
         logger.info("Gemini normalisation result: %s", nutrition)
+
+        if nutrition.item_name == "NOT_A_LABEL" or (
+            nutrition.serving_value is None
+            and nutrition.calories is None
+            and nutrition.protein is None
+            and nutrition.carbs is None
+            and nutrition.fat is None
+        ):
+            await update.message.reply_text(
+                "⚠️ Could not extract nutrition data from this image. "
+                "Make sure it's a clear photo of a nutrition facts label."
+            )
+            return
     except json.JSONDecodeError:
         logger.exception("Gemini returned invalid JSON")
         await update.message.reply_text(
