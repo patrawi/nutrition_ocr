@@ -1,15 +1,15 @@
 # 🥗 NutriTracker Bot
 
-A Telegram bot that extracts nutrition data from food-label photos and logs it to Google Sheets — powered by **Mistral OCR** and **Gemini AI**.
+A Telegram bot that extracts nutrition data from food-label photos and logs it to Google Sheets — powered by **Google Gemini**.
 
 ## How It Works
 
 ```
-📸 Photo → 🔍 Mistral OCR 3 → 🤖 Gemini 3.0 Flash → 📊 Google Sheets
+📸 Photo → 🔍 Gemini 3.8 Flash (OCR) → 🤖 Gemini 3.8 Flash → 📊 Google Sheets
 ```
 
 1. Send a photo of a nutrition label to the bot on Telegram
-2. **Mistral OCR** extracts raw text from the image
+2. **Gemini Flash** extracts raw text from the image (vision OCR)
 3. **Gemini** parses structured nutrition data (calories, protein, carbs, fat, serving size)
 4. The data is saved to your **Google Sheet** automatically
 
@@ -31,8 +31,7 @@ A Telegram bot that extracts nutrition data from food-label photos and logs it t
 
 - **Python 3.12+**
 - **[python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)** — Telegram Bot API
-- **[Mistral AI](https://mistral.ai/)** — OCR (image → text)
-- **[Google Gemini](https://ai.google.dev/)** — AI text parsing (text → structured JSON)
+- **[Google Gemini](https://ai.google.dev/)** — OCR (image → text) and AI text parsing (text → structured JSON)
 - **[gspread](https://github.com/burnash/gspread)** — Google Sheets API
 
 ## Setup
@@ -52,7 +51,6 @@ pip install -r requirements.txt
 | Service | Where to get it |
 |---------|----------------|
 | Telegram Bot Token | [@BotFather](https://t.me/BotFather) on Telegram |
-| Mistral API Key | [console.mistral.ai](https://console.mistral.ai/) |
 | Gemini API Key | [aistudio.google.com](https://aistudio.google.com/apikey) |
 | Google Service Account | [Google Cloud Console](https://console.cloud.google.com/iam-admin/serviceaccounts) → Create key (JSON) |
 
@@ -68,10 +66,11 @@ Create a `.env` file:
 
 ```env
 TELEGRAM_TOKEN=your_telegram_bot_token
-MISTRAL_API_KEY=your_mistral_api_key
 GEMINI_API_KEY=your_gemini_api_key
 GOOGLE_SHEETS_CREDENTIALS=credentials.json
 GOOGLE_SHEETS_ID=your_spreadsheet_id
+# Optional: override the Gemini model (default: gemini-3.8-flash)
+# GEMINI_MODEL=gemini-3.8-flash
 ```
 
 ### 5. Run
@@ -90,7 +89,6 @@ python3 main.py
 | Variable | Value |
 |----------|-------|
 | `TELEGRAM_TOKEN` | Your bot token |
-| `MISTRAL_API_KEY` | Your Mistral key |
 | `GEMINI_API_KEY` | Your Gemini key |
 | `GOOGLE_SHEETS_ID` | Your spreadsheet ID |
 | `GOOGLE_CREDENTIALS_JSON` | Entire `credentials.json` content as a single-line JSON string |

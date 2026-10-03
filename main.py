@@ -1,6 +1,6 @@
 """NutriTracker — Telegram bot that extracts nutrition data from food-label photos.
 
-Pipeline: Photo → Mistral OCR → Gemini AI → Google Sheets
+Pipeline: Photo → Gemini OCR → Gemini AI → Google Sheets
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "👋 Welcome to *NutriTracker*!\n\n"
         "Send me a photo of a food nutrition label and I'll:\n"
-        "1️⃣  Extract the text (Mistral OCR)\n"
+        "1️⃣  Extract the text (Gemini OCR)\n"
         "2️⃣  Parse the nutrition facts (Gemini)\n"
         "3️⃣  Save everything to your Google Sheet\n\n"
         "Just snap a photo and send it! 📸",
@@ -61,7 +61,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(f"❌ Could not download your photo: {exc}")
         return
 
-    # ── Step 1: OCR via Mistral ──────────────────────────────────────────
+    # ── Step 1: OCR via Gemini ───────────────────────────────────────────
     try:
         raw_ocr = await ocr_image(image_bytes)
         if not raw_ocr.strip():
@@ -71,7 +71,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             return
         logger.info("OCR succeeded (%d chars)", len(raw_ocr))
     except Exception as exc:
-        logger.exception("Mistral OCR failed")
+        logger.exception("Gemini OCR failed")
         await update.message.reply_text(f"❌ OCR failed: {exc}")
         return
 

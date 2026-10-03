@@ -1,36 +1,32 @@
-"""Mistral OCR service."""
+"""Gemini OCR service."""
 
 from __future__ import annotations
 
-import base64
 import logging
 
-from mistralai.client.models import ImageURL, ImageURLChunk
+from google.genai import types
 
 import config
 
 logger = logging.getLogger(__name__)
 
+OCR_PROMPT = (
+    "You are an OCR engine. Transcribe every piece of text visible in this "
+    "image exactly as written, preserving reading order, numbers and units. "
+    "The image is likely a photo of a food nutrition label. "
+    "Output the transcription as plain text only — no commentary, no markdown."
+)
+
 
 async def ocr_image(image_bytes: bytes) -> str:
-    """Send an image to Mistral OCR and return the raw markdown text."""
-    encoded = base64.b64encode(image_bytes).decode("utf-8")
-    data_uri = f"data:image/jpeg;base64,{encoded}"
+    """Send an image to Gemini Flash and return the raw transcribed text."""
+    image = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
 
-    document = ImageURLChunk(
-        type="image_url",
-        image_url=ImageURL(url=data_uri),
+    response = config.gemini_client.models.generate_content(
+        model=config.GEMINI_MODEL,
+        contents=[OCR_PROMPT, image],
     )
 
-    ocr_response = config.mistral_client.ocr.process(
-        model="mistral-ocr-latest",
-        document=document,
-    )
-
-    text = "\n".join(page.markdown for page in ocr_response.pages)
-    logger.info(
-        "OCR extracted %d chars from %d pages",
-        len(text),
-        len(ocr_response.pages),
-    )
+    text = (response.text or "").strip()
+    logger.info("OCR extracted %d chars", len(text))
     return text

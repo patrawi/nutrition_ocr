@@ -4,12 +4,11 @@ This file provides guidance to the AI agent when working with code in this repos
 
 ## Project Overview
 
-NutriTracker is a Telegram bot that extracts nutrition data from food-label photos and logs them to Google Sheets. Pipeline: Photo → Mistral OCR → Gemini AI → Google Sheets.
+NutriTracker is a Telegram bot that extracts nutrition data from food-label photos and logs them to Google Sheets. Pipeline: Photo → Gemini OCR → Gemini AI → Google Sheets.
 
 ## Environment Setup
 
 1. Install dependencies: `pip install -r requirements.txt`
-   - `mistralai` is pinned to `>=2.0.0` (v2 has breaking import and API schema changes)
 2. Copy `.env.example` to `.env` and fill in required API keys
 3. Google Sheets requires either:
    - Local: `GOOGLE_SHEETS_CREDENTIALS=path/to/credentials.json` (service account file)
@@ -36,7 +35,7 @@ The app is split into focused modules:
 
 - `config.py` — Environment variables and API clients (loaded at import time)
 - `models.py` — `NutritionData` dataclass and `parse_serving_size` parser
-- `ocr.py` — Mistral OCR (`ocr_image`)
+- `ocr.py` — Gemini OCR (`ocr_image`)
 - `normalizer.py` — Gemini extraction (`normalize_ocr`)
 - `sheets.py` — Google Sheets auth and append logic (`append_nutrition_row`)
 - `main.py` — Telegram handlers and pipeline wiring
@@ -44,7 +43,7 @@ The app is split into focused modules:
 ### Pipeline Flow
 
 1. **Photo Handler** (`handle_photo` in `main.py`) — Downloads photo
-2. **OCR** (`ocr.ocr_image`) — Mistral OCR returns raw markdown text
+2. **OCR** (`ocr.ocr_image`) — Gemini vision OCR returns transcribed plain text
 3. **Normalization** (`normalizer.normalize_ocr`) — Gemini extracts JSON with keys: `item_name`, `serving_value`, `serving_unit`, `calories`, `protein`, `carbs`, `fat`
 4. **Model building** (`models.NutritionData.from_gemini_dict`) — Parses Gemini JSON; falls back to parsing `per_unit` if Gemini returns the old combined format
 5. **Storage** (`sheets.append_nutrition_row`) — Appends a 10-column row to the first worksheet
@@ -69,12 +68,14 @@ The app is split into focused modules:
 - `append_nutrition_row` uses `value_input_option="USER_ENTERED"` — keep this so numbers parse correctly in Sheets.
 - `parse_serving_size` handles strings like `"100g"`, `"100ml"`, `"15 g"` and falls back gracefully on unparseable input.
 
-### Critical Mistral v2 Gotchas
+### Critical Gemini OCR Gotchas
 
-- **Import path**: `from mistralai.client import Mistral` (not `from mistralai import Mistral`).
-- **Base64 images must use typed models**: Pass `ImageURLChunk(type="image_url", image_url=ImageURL(url=data_uri))` to `ocr.process`. Passing a raw dict with a string `image_url` causes the model to return garbage binary output.
+- **Migrated from Mistral OCR (Oct 2026)**: Mistral's free tier changed, so the OCR stage now uses the same `google-genai` client and `GEMINI_MODEL` as the normalizer — one API key, one SDK.
+- **Model ID**: defaults to `gemini-3.8-flash`, overridable via the `GEMINI_MODEL` env var (both OCR and normalization share it).
+- **Image parts must use typed models**: pass `types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")` — do not pass raw dicts.
+- **`response.text` can be `None`**: `ocr_image` coalesces it to `""` so the empty-text guard in `handle_photo` still fires.
 - **No test suite existed until recently** — linting is configured; tests live under `tests/`.
 
-### Critical Gemini Gotcha
+### Critical Gemini Normalization Gotcha
 
 - Gemini may return integers (e.g., `{"calories": 100}`) instead of strings. `NutritionData.from_gemini_dict` coerces values with `str()` before stripping — preserve this when modifying the parser.
