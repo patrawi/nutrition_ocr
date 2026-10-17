@@ -1,11 +1,10 @@
 """NutriTracker — Telegram bot that extracts nutrition data from food-label photos.
 
-Pipeline: Photo → Gemini OCR → Gemini AI → Google Sheets
+Pipeline: Photo → Label extraction (Gemini OCR + normalisation) → Google Sheets
 """
 
 from __future__ import annotations
 
-import json
 import logging
 from io import BytesIO
 
@@ -19,9 +18,7 @@ from telegram.ext import (
 )
 
 import config
-from models import NutritionData
-from normalizer import normalize_ocr
-from ocr import ocr_image
+from extraction import extract_nutrition
 from sheets import append_nutrition_row
 
 logging.basicConfig(
@@ -46,10 +43,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Pipeline: download → OCR → normalise → store → reply."""
+    """Pipeline: download → extract → store → reply. Telegram concerns only."""
     await update.message.reply_text("📷 Got your photo! Processing…")
 
-    # ── Step 0: Download the highest-resolution photo ────────────────────
+    # ── Download the highest-resolution photo ────────────────────────────
     try:
         photo_file = await update.message.photo[-1].get_file()
         buffer = BytesIO()
@@ -61,59 +58,33 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(f"❌ Could not download your photo: {exc}")
         return
 
-    # ── Step 1: OCR via Gemini ───────────────────────────────────────────
+    # ── Extract (OCR + normalise + label guard behind one interface) ────
     try:
-        raw_ocr = await ocr_image(image_bytes)
-        if not raw_ocr.strip():
-            await update.message.reply_text(
-                "⚠️ OCR returned empty text. Is this a clear nutrition label?"
-            )
-            return
-        logger.info("OCR succeeded (%d chars)", len(raw_ocr))
+        extraction = await extract_nutrition(image_bytes)
     except Exception as exc:
-        logger.exception("Gemini OCR failed")
-        await update.message.reply_text(f"❌ OCR failed: {exc}")
+        logger.exception("Label extraction failed")
+        await update.message.reply_text(f"❌ Could not read the label: {exc}")
         return
 
-    # ── Step 2: Normalise via Gemini ─────────────────────────────────────
-    try:
-        gemini_dict = await normalize_ocr(raw_ocr)
-        nutrition = NutritionData.from_gemini_dict(gemini_dict)
-        logger.info("Gemini normalisation result: %s", nutrition)
-
-        if nutrition.item_name == "NOT_A_LABEL" or (
-            nutrition.serving_value is None
-            and nutrition.calories is None
-            and nutrition.protein is None
-            and nutrition.carbs is None
-            and nutrition.fat is None
-        ):
-            await update.message.reply_text(
-                "⚠️ Could not extract nutrition data from this image. "
-                "Make sure it's a clear photo of a nutrition facts label."
-            )
-            return
-    except json.JSONDecodeError:
-        logger.exception("Gemini returned invalid JSON")
+    if not extraction.is_label:
         await update.message.reply_text(
-            "❌ Could not parse nutrition data — Gemini returned invalid JSON."
+            "⚠️ Could not extract nutrition data from this image. "
+            "Make sure it's a clear photo of a nutrition facts label."
         )
         return
-    except Exception as exc:
-        logger.exception("Gemini normalisation failed")
-        await update.message.reply_text(f"❌ Normalisation failed: {exc}")
-        return
 
-    # ── Step 3: Save to Google Sheets ────────────────────────────────────
+    nutrition = extraction.nutrition
+
+    # ── Save to Google Sheets ────────────────────────────────────────────
     try:
-        append_nutrition_row(nutrition, raw_ocr)
+        append_nutrition_row(nutrition, extraction.raw_ocr)
         logger.info("Row appended to Google Sheet")
     except Exception as exc:
         logger.exception("Google Sheets write failed")
         await update.message.reply_text(f"❌ Failed to save to Google Sheets: {exc}")
         return
 
-    # ── Step 4: Feedback ─────────────────────────────────────────────────
+    # ── Feedback ─────────────────────────────────────────────────────────
     await update.message.reply_text(
         f"✅ Saved *{nutrition.item_name}*!\n{nutrition.format_summary()}",
         parse_mode="Markdown",

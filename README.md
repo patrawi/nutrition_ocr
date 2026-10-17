@@ -104,12 +104,16 @@ cat credentials.json | python3 -c "import sys,json; print(json.dumps(json.load(s
 ## Project Structure
 
 ```
-food_tracker_bot/
-├── main.py              # Bot logic (handlers, OCR, Gemini, Sheets)
+nutritracker/
+├── main.py              # Telegram bot (handlers, pipeline wiring)
+├── extraction.py        # Label extraction (Gemini OCR + normalisation)
+├── models.py            # NutritionData dataclass + parsers
+├── sheets.py            # Google Sheets storage
+├── config.py            # Environment variables
+├── tests/               # pytest suite
 ├── requirements.txt     # Python dependencies
 ├── credentials.json     # Google service account key (not committed)
 ├── .env                 # Environment variables (not committed)
-├── .gitignore           # Git ignore rules
 └── README.md            # This file
 ```
 
