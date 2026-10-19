@@ -36,15 +36,17 @@ The app is split into focused modules:
 - `config.py` — Environment variables (loaded at import time; no clients created here)
 - `models.py` — `NutritionData` dataclass and `parse_serving_size` parser
 - `extraction.py` — Label extraction deep module: `extract_nutrition(image_bytes, client=None)` → `Extraction` (`nutrition`, `raw_ocr`, `is_label`). Hides both Gemini round-trips (vision OCR + JSON extraction), markdown fence stripping, and the not-a-label guard. The Gemini client is accepted at the interface (injectable for tests) and lazily created when omitted.
+- `pending.py` — Pending Entry store: `PendingEntries.create/get/remove/apply_correction`. In-memory only, silent lazy expiry (default 1h TTL, clock injectable). `Correction` validates: `serving` goes through `parse_serving_size` and is rejected without a number; other fields must be non-empty.
 - `sheets.py` — Google Sheets auth and append logic (`append_nutrition_row`)
 - `main.py` — Telegram handlers and pipeline wiring (Telegram concerns only)
 
 ### Pipeline Flow
 
-1. **Photo Handler** (`handle_photo` in `main.py`) — Downloads photo
+1. **Photo Handler** (`handle_photo` in `main.py`) — Captures `photo_time` (this becomes the row's Date/Time), downloads photo
 2. **Extraction** (`extraction.extract_nutrition`) — Gemini vision OCR returns transcribed text, then Gemini extracts JSON with keys: `item_name`, `serving_value`, `serving_unit`, `calories`, `protein`, `carbs`, `fat`; builds `NutritionData` and exposes `is_label` (a computed property: False on empty OCR, the `NOT_A_LABEL` sentinel, or all-null data)
 3. **Guard** (`main.py` checks `extraction.is_label`) — Rejects non-label photos before storage
-4. **Storage** (`sheets.append_nutrition_row`) — Appends a 10-column row to the first worksheet
+4. **Pending Entry** (`main.py` + `pending.py`) — Summary + inline keyboard ([✅ บันทึก] [✏️ แก้ค่า] [❌ ยกเลิก]); nothing reaches the Sheet until the user confirms. Multiple pendings stack independently (keyed by id); field-edits are one-per-chat (`active_edits`, F2 rule)
+5. **Save** (`sheets.append_nutrition_row(data, raw_ocr, timestamp=photo_time)`) — Appends a 10-column row on explicit ✅ only
 
 ### Google Sheets Column Order (10 columns)
 

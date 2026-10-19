@@ -52,9 +52,12 @@ def _get_sheets_client() -> gspread.Spreadsheet:
     return _gspread_client.open_by_key(config.GOOGLE_SHEETS_ID)
 
 
-def append_nutrition_row(data: NutritionData, raw_ocr: str) -> None:
+def append_nutrition_row(
+    data: NutritionData, raw_ocr: str, timestamp: datetime | None = None
+) -> None:
     """Append a nutrition row to the first worksheet.
 
+    `timestamp` is when the label photo was shot; defaults to now.
     Column order (10 columns):
         1. วันที่ลงบันทึก   (Date)
         2. เวลาที่ลงบันทึก   (Time)
@@ -67,7 +70,7 @@ def append_nutrition_row(data: NutritionData, raw_ocr: str) -> None:
         9. ไขมัน             (Fat)
        10. รายละเอียดที่แปลงภาพ (Raw OCR)
     """
-    now = datetime.now()
+    now = timestamp or datetime.now()
     row = [
         now.strftime("%Y-%m-%d"),
         now.strftime("%H:%M:%S"),

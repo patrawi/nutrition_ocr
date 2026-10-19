@@ -4,20 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from unittest.mock import MagicMock
 
 import pytest
-
-os.environ.update(
-    {
-        "TELEGRAM_TOKEN": "test",
-        "GEMINI_API_KEY": "test",
-        "GOOGLE_SHEETS_ID": "test",
-        "GOOGLE_SHEETS_CREDENTIALS": "test.json",
-    }
-)
-
 from google.genai import types
 
 import config

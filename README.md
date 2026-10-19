@@ -11,7 +11,8 @@ A Telegram bot that extracts nutrition data from food-label photos and logs it t
 1. Send a photo of a nutrition label to the bot on Telegram
 2. **Gemini Flash** extracts raw text from the image (vision OCR)
 3. **Gemini** parses structured nutrition data (calories, protein, carbs, fat, serving size)
-4. The data is saved to your **Google Sheet** automatically
+4. The bot shows a summary — **check it, fix any value (✏️), then tap ✅ บันทึก**
+5. The data is saved to your **Google Sheet** only after you confirm
 
 ### Google Sheet Columns
 
