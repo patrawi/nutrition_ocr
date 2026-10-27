@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -19,21 +20,21 @@ def _update(user_id: int | None) -> SimpleNamespace:
 def test_gate_allows_authorized_user(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config, "AUTHORIZED_USER_IDS", frozenset({42}))
 
-    gate(_update(42), None)
+    asyncio.run(gate(_update(42), None))
 
 
 def test_gate_drops_unauthorized_user(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config, "AUTHORIZED_USER_IDS", frozenset({42}))
 
     with pytest.raises(ApplicationHandlerStop):
-        gate(_update(43), None)
+        asyncio.run(gate(_update(43), None))
 
 
 def test_gate_drops_userless_update(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config, "AUTHORIZED_USER_IDS", frozenset({42}))
 
     with pytest.raises(ApplicationHandlerStop):
-        gate(_update(None), None)
+        asyncio.run(gate(_update(None), None))
 
 
 def test_gate_drops_everyone_when_allowlist_empty(
@@ -42,4 +43,4 @@ def test_gate_drops_everyone_when_allowlist_empty(
     monkeypatch.setattr(config, "AUTHORIZED_USER_IDS", frozenset())
 
     with pytest.raises(ApplicationHandlerStop):
-        gate(_update(42), None)
+        asyncio.run(gate(_update(42), None))

@@ -18,7 +18,7 @@ import config
 logger = logging.getLogger(__name__)
 
 
-def gate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def gate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Drop any update that does not come from an Authorized User."""
     user = update.effective_user
     if user is not None and user.id in config.AUTHORIZED_USER_IDS:
