@@ -4,6 +4,10 @@ A Telegram bot that turns nutrition-label photos into rows in a Google Sheet.
 
 ## Language
 
+**Authorized User**:
+A Telegram user whose id is on the owner's allowlist; the only users whose updates the bot serves. Anyone else is ignored without any response.
+_Avoid_: admin, whitelisted user, member
+
 **Label**:
 A photo from which usable nutrition data can be extracted. A photo of anything else is not a Label.
 _Avoid_: valid photo, good image

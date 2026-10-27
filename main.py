@@ -19,12 +19,15 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    TypeHandler,
     filters,
 )
 
 import config
+from access import gate
 from extraction import extract_nutrition
 from pending import CORRECTABLE_FIELDS, PendingEntries
+from ratelimit import RateLimiter
 from sheets import append_nutrition_row
 
 logging.basicConfig(
@@ -35,14 +38,17 @@ logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 pending_entries = PendingEntries()
-# One field-edit in progress per chat (F2)
-active_edits: dict[int, EditSession] = {}
+rate_limiter = RateLimiter()
 
 
 class EditSession(NamedTuple):
     entry_id: str
     field: str
     summary_message_id: int
+
+
+# One field-edit in progress per chat (F2)
+active_edits: dict[int, EditSession] = {}
 
 
 FIELD_LABELS = {
@@ -121,8 +127,24 @@ async def _render_summary(query, entry) -> None:
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Pipeline: download → extract → Pending Entry → ask user to confirm."""
+    """Pipeline: throttle → download → extract → Pending Entry → confirm."""
     photo_time = datetime.now()
+
+    # ── Throttle the expensive path before paying for anything ─────────
+    allowed, retry = rate_limiter.check(update.effective_user.id)
+    if not allowed:
+        minutes = max(1, round(retry.total_seconds() / 60))
+        await update.message.reply_text(
+            f"⏳ ช้าๆหน่อยน้องพี่ตามไม่ทัน ลองใหม่ในอีก ~{minutes} นาทีนะ"
+        )
+        return
+
+    if pending_entries.full():
+        await update.message.reply_text(
+            "📦 ค้างอยู่เยอะแล้วนะ กด ✅ หรือ ❌ รายการเก่าก่อน แล้วค่อยถ่ายใหม่"
+        )
+        return
+
     await update.message.reply_text("📷 Got your photo! Processing…")
 
     # ── Download the highest-resolution photo ────────────────────────────
@@ -132,17 +154,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await photo_file.download_to_memory(buffer)
         image_bytes = buffer.getvalue()
         buffer.close()
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to download photo")
-        await update.message.reply_text(f"❌ Could not download your photo: {exc}")
+        await update.message.reply_text("❌ รับรูปไม่สำเร็จ ลองส่งใหม่อีกครั้งนะ")
         return
 
     # ── Extract (OCR + normalise + label guard behind one interface) ────
     try:
         extraction = await extract_nutrition(image_bytes)
-    except Exception as exc:
+    except Exception:
         logger.exception("Label extraction failed")
-        await update.message.reply_text(f"❌ Could not read the label: {exc}")
+        await update.message.reply_text("❌ อ่านฉลากไม่สำเร็จ ลองถ่ายใหม่ให้ภาพชัดกว่านี้นะ 📸")
         return
 
     if not extraction.is_label:
@@ -153,7 +175,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     # ── Pending Entry: nothing is saved until the user confirms ─────────
-    entry_id = pending_entries.create(extraction, photo_time)
+    entry_id = pending_entries.create(
+        extraction, photo_time, chat_id=update.effective_chat.id
+    )
     await update.message.reply_text(
         _summary_text(entry_id, extraction.nutrition, len(extraction.raw_ocr)),
         reply_markup=_confirm_keyboard(entry_id),
@@ -173,7 +197,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if action == "cancel":
         await query.answer()
         entry = pending_entries.get(entry_id)
-        if entry is None:
+        if entry is None or entry.chat_id != update.effective_chat.id:
             await query.edit_message_text(_expired_text())
             return
         pending_entries.remove(entry_id)
@@ -181,7 +205,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     entry = pending_entries.get(entry_id)
-    if entry is None:
+    if entry is None or entry.chat_id != update.effective_chat.id:
         await query.answer()
         await query.edit_message_text(_expired_text())
         return
@@ -201,9 +225,9 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 f"{entry.extraction.nutrition.format_summary()}",
                 parse_mode="Markdown",
             )
-        except Exception as exc:
+        except Exception:
             logger.exception("Google Sheets write failed")
-            await query.edit_message_text(f"❌ บันทึกไม่สำเร็จ: {exc}")
+            await query.edit_message_text("❌ บันทึกไม่สำเร็จ ลองกดบันทึกใหม่อีกครั้งนะ")
 
     elif action == "edit":
         if update.effective_chat.id in active_edits:
@@ -240,7 +264,7 @@ async def handle_field_pick(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     entry = pending_entries.get(entry_id)
-    if entry is None:
+    if entry is None or entry.chat_id != update.effective_chat.id:
         await query.answer()
         await query.edit_message_text(_expired_text())
         return
@@ -312,6 +336,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 def main() -> None:
     """Build and run the Telegram bot."""
     app = Application.builder().token(config.TELEGRAM_TOKEN).build()
+
+    # Gatekeeper runs before every handler; strangers are dropped silently.
+    app.add_handler(TypeHandler(Update, gate), group=-1)
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))

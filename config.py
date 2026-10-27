@@ -14,4 +14,10 @@ GOOGLE_SHEETS_ID: str = os.environ["GOOGLE_SHEETS_ID"]
 
 GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 
+AUTHORIZED_USER_IDS: frozenset[int] = frozenset(
+    int(part)
+    for part in os.environ.get("AUTHORIZED_USER_IDS", "").replace(" ", "").split(",")
+    if part
+)
+
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]

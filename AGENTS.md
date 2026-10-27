@@ -34,6 +34,8 @@ The bot uses `python-telegram-bot` and runs via polling (not webhooks) by defaul
 The app is split into focused modules:
 
 - `config.py` — Environment variables (loaded at import time; no clients created here)
+- `access.py` — Gatekeeper: `gate(update, context)` drops updates not from an Authorized User (silent drop + INFO log). Registered as a group -1 `TypeHandler` so it runs before every handler.
+- `ratelimit.py` — `RateLimiter.check(user_id)` sliding-window limiter (10/hour + 3/min burst, injected clock) guarding the photo seam.
 - `models.py` — `NutritionData` dataclass and `parse_serving_size` parser
 - `extraction.py` — Label extraction deep module: `extract_nutrition(image_bytes, client=None)` → `Extraction` (`nutrition`, `raw_ocr`, `is_label`). Hides both Gemini round-trips (vision OCR + JSON extraction), markdown fence stripping, and the not-a-label guard. The Gemini client is accepted at the interface (injectable for tests) and lazily created when omitted.
 - `pending.py` — Pending Entry store: `PendingEntries.create/get/remove/apply_correction`. In-memory only, silent lazy expiry (default 1h TTL, clock injectable). `Correction` validates: `serving` goes through `parse_serving_size` and is rejected without a number; other fields must be non-empty.
@@ -63,6 +65,7 @@ The app is split into focused modules:
 
 ### Important Implementation Details
 
+- **Security posture**: fail-closed `AUTHORIZED_USER_IDS` gate; unauthorized updates are dropped silently (never replied); guard state (allowlist, rate limits, pending entries) is in-memory by design. Pending Entries are bound to their chat — wrong-chat button presses answer the same "expired" message. User-less updates (e.g. channel posts) count as unauthorized.
 - Preserve the global credential caching pattern in `sheets.py` (`_google_creds`, `_gspread_client`) and the lazy Gemini client in `extraction.py` (`_client`).
 - `_normalize_ocr` in `extraction.py` strips markdown code fences from Gemini output before parsing JSON — preserve this logic.
 - `append_nutrition_row` uses `value_input_option="USER_ENTERED"` — keep this so numbers parse correctly in Sheets.

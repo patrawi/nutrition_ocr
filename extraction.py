@@ -123,7 +123,7 @@ async def _normalize_ocr(gemini: Client, raw_ocr: str) -> dict:
         f"OCR Text:\n{raw_ocr}"
     )
 
-    logger.info("Sending %d chars to Gemini:\n%s", len(raw_ocr), raw_ocr)
+    logger.debug("Sending %d chars to Gemini:\n%s", len(raw_ocr), raw_ocr)
 
     response = gemini.models.generate_content(
         model=config.GEMINI_MODEL,

@@ -2,7 +2,8 @@
 
 In-memory only — if the bot restarts, pending entries are gone (accepted
 trade-off). Entries expire silently after the TTL; expiry is checked lazily
-on access, so no background timer exists.
+on access, so no background timer exists. Each entry is bound to the chat
+that created it, and the store holds at most `capacity` live entries.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ class PendingEntry:
     """One Extraction awaiting the user's decision, with the time it was shot."""
 
     id: str
+    chat_id: int
     extraction: Extraction
     photo_time: datetime
     created_at: datetime
@@ -36,15 +38,23 @@ class PendingEntries:
         self,
         clock: Callable[[], datetime] = datetime.now,
         ttl_seconds: int = 3600,
+        capacity: int = 20,
     ) -> None:
         self._clock = clock
         self._ttl = timedelta(seconds=ttl_seconds)
+        self._capacity = capacity
         self._entries: dict[str, PendingEntry] = {}
 
-    def create(self, extraction: Extraction, photo_time: datetime) -> str:
+    def full(self) -> bool:
+        """True when no new Pending Entry fits; check before expensive work."""
+        self._expire(self._clock())
+        return len(self._entries) >= self._capacity
+
+    def create(self, extraction: Extraction, photo_time: datetime, chat_id: int) -> str:
         entry_id = uuid4().hex[:12]
         self._entries[entry_id] = PendingEntry(
             id=entry_id,
+            chat_id=chat_id,
             extraction=extraction,
             photo_time=photo_time,
             created_at=self._clock(),
@@ -52,14 +62,8 @@ class PendingEntries:
         return entry_id
 
     def get(self, entry_id: str) -> PendingEntry | None:
-        entry = self._entries.get(entry_id)
-        if entry is None:
-            return None
-        if self._clock() - entry.created_at > self._ttl:
-            logger.info("Pending entry %s expired", entry_id)
-            del self._entries[entry_id]
-            return None
-        return entry
+        self._expire(self._clock())
+        return self._entries.get(entry_id)
 
     def remove(self, entry_id: str) -> None:
         self._entries.pop(entry_id, None)
@@ -86,3 +90,13 @@ class PendingEntries:
 
         logger.info("Corrected %s of pending entry %s", field, entry_id)
         return True
+
+    def _expire(self, now: datetime) -> None:
+        expired = [
+            entry_id
+            for entry_id, entry in self._entries.items()
+            if now - entry.created_at > self._ttl
+        ]
+        for entry_id in expired:
+            logger.info("Pending entry %s expired", entry_id)
+            del self._entries[entry_id]
